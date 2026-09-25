@@ -288,7 +288,7 @@ impl<'a> BodyGen<'a> {
     pub(super) fn gen_expr_inner(&mut self, e: &Expr) -> (String, Ty) {
         match e {
             Expr::Int(s) => (
-                s.clone(),
+                crate::codegen::int_lit(s),
                 Ty {
                     base: "int".into(),
                     ..Default::default()

@@ -211,7 +211,7 @@ fn default_value(prog: &Program, mi: usize, ns: &[String], ty: &Type) -> Option<
 /// expression that is not a compile-time integral constant.
 fn enum_member_value(e: &Expr) -> Option<String> {
     Some(match e {
-        Expr::Int(s) => s.clone(),
+        Expr::Int(s) => int_lit(s),
         Expr::Bool(b) => (if *b { "1" } else { "0" }).to_string(),
         // A bare identifier is a sibling enumerator, valid inside the same `enum`.
         Expr::Ident(n) => n.clone(),
@@ -260,7 +260,7 @@ fn enum_abstract_value(e: &Expr) -> Option<String> {
     Some(match e {
         Expr::Str { raw, .. } => format!("\"{}\"", escape_str(raw)),
         Expr::Float(s) => float_lit(s),
-        Expr::Int(s) => s.clone(),
+        Expr::Int(s) => int_lit(s),
         Expr::Bool(b) => (if *b { "true" } else { "false" }).to_string(),
         // A sibling member, valid as `X_::Other` from inside the same namespace.
         Expr::Ident(n) => n.clone(),
@@ -551,11 +551,35 @@ fn sanitize(s: &str) -> String {
         .collect()
 }
 
+/// Render a Haxe `Int` literal as C++.
+///
+/// Haxe's `Int` is 32 bits, so a hex literal from `0x80000000` to `0xFFFFFFFF` is a
+/// *negative* `Int` (`0x80000000 == -2147483648`). In C++ the same spelling is an
+/// `unsigned int` literal, and the unsignedness spreads: `a ^ 0x80000000` becomes
+/// unsigned, `<` compares unsigned, `>>` shifts in zeros. The value is kept but every
+/// operation around it changes meaning, silently. Such literals are therefore emitted
+/// as `((int)0x…)`, which C++98 defines on every two's-complement target Hatchet
+/// serves. Smaller hex literals and all decimal literals are left as written.
+pub(crate) fn int_lit(s: &str) -> String {
+    let t = s.trim();
+    if t.len() > 2 && (t.starts_with("0x") || t.starts_with("0X")) {
+        let digits = t[2..].trim_start_matches('0');
+        if digits.len() == 8 {
+            if let Ok(v) = u32::from_str_radix(digits, 16) {
+                if v >= 0x8000_0000 {
+                    return format!("((int){t})");
+                }
+            }
+        }
+    }
+    s.to_string()
+}
+
 /// Render a scalar literal expression to C++ (`null`→`NULL`, floats get an `f`
 /// suffix). Returns `None` for non-scalar expressions (objects, arrays, lambdas).
 pub(crate) fn render_scalar_literal(e: &Expr) -> Option<String> {
     Some(match e {
-        Expr::Int(s) => s.clone(),
+        Expr::Int(s) => int_lit(s),
         Expr::Float(s) => float_lit(s),
         Expr::Bool(b) => b.to_string(),
         Expr::Null => "NULL".to_string(),
