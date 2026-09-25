@@ -2,7 +2,9 @@
 //! `util.MathOps.twice(4)` and `util.MathOps.K` with no `import`, which Haxe allows.
 //! They used to be emitted segment by segment with dots (`util.MathOps.twice(4)`),
 //! which is not C++, and the defining header was never included. A parameter that
-//! happens to share the package's name must still read as the parameter.
+//! happens to share the package's name must still read as the parameter. A class of
+//! the same package used only for its statics (`Tally.add(1)`), also without an import,
+//! must have its header included too.
 //!
 //! Skipped (passes vacuously) when no C++ compiler is available.
 
@@ -37,6 +39,17 @@ class MathOps {
 }
 "#;
 
+const TALLY: &str = r#"package app;
+
+class Tally {
+	public static var total:Int = 0;
+	public static function add(n:Int):Int {
+		total += n;
+		return total;
+	}
+}
+"#;
+
 const RUNNER: &str = r#"package app;
 
 class Runner {
@@ -46,7 +59,8 @@ class Runner {
 		var a:Int = util.MathOps.twice(4);
 		var b:Int = util.MathOps.K;
 		util.MathOps.calls += 10;
-		return a * 100 + b * 10 + util.MathOps.calls;
+		Tally.add(1000);
+		return a * 100 + b * 10 + util.MathOps.calls + Tally.total;
 	}
 
 	// `util` here is the parameter, not the package.
@@ -93,6 +107,7 @@ fn qualified_type_paths_compile_and_run() {
     std::fs::create_dir_all(src.join("app")).unwrap();
     std::fs::write(src.join("util").join("MathOps.hx"), MATHOPS).unwrap();
     std::fs::write(src.join("app").join("Runner.hx"), RUNNER).unwrap();
+    std::fs::write(src.join("app").join("Tally.hx"), TALLY).unwrap();
     let main_cpp = root.join("main.cpp");
     std::fs::write(&main_cpp, MAIN_CPP).unwrap();
     let out = root.join("out");
@@ -137,5 +152,5 @@ fn qualified_type_paths_compile_and_run() {
     );
     let run = Command::new(&exe).output().expect("run the demo");
     let stdout = String::from_utf8_lossy(&run.stdout);
-    assert_eq!(stdout.trim(), "run=841 shadowed=42", "got: {stdout}");
+    assert_eq!(stdout.trim(), "run=1841 shadowed=42", "got: {stdout}");
 }

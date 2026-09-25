@@ -56,6 +56,7 @@ fn collect_refs(prog: &Program, mi: usize) -> Collector {
         func_uses: Vec::new(),
         anon_container_uses: Vec::new(),
         empty_anon_uses: Vec::new(),
+        static_receivers: BTreeSet::new(),
     };
     for d in &m.file.decls {
         c.decl(d);
@@ -1217,8 +1218,16 @@ impl<'a> UnsupportedWalker<'a> {
 /// headers can be `#include`d). Excludes `mi` itself.
 pub fn referenced_modules(prog: &Program, mi: usize) -> BTreeSet<usize> {
     let mut out = BTreeSet::new();
-    for r in collect_refs(prog, mi).refs {
+    let c = collect_refs(prog, mi);
+    for r in c.refs {
         if let Some(ti) = prog.resolve_type(&r.path, mi) {
+            if ti.module_index != mi {
+                out.insert(ti.module_index);
+            }
+        }
+    }
+    for name in c.static_receivers {
+        if let Some(ti) = prog.resolve_type(std::slice::from_ref(&name), mi) {
             if ti.module_index != mi {
                 out.insert(ti.module_index);
             }
@@ -1241,6 +1250,11 @@ struct Collector {
     /// that is a deprecated Hatchet-ism (in hxcpp `{}` is a structure, not a raw
     /// pointer); the context label is surfaced as a deprecation warning.
     empty_anon_uses: Vec<String>,
+    /// Capitalised receivers of a member access (`Conf.feed(...)`, `Conf.MAX`): a
+    /// type used for its statics, which needs its header though no annotation names
+    /// it. Kept apart from `refs` because a receiver that is not a type is no error;
+    /// only `referenced_modules` reads these, and only the ones that resolve.
+    static_receivers: BTreeSet<String>,
 }
 
 impl Collector {
@@ -1489,6 +1503,13 @@ impl Collector {
     /// Walk an expression for the type names it mentions, recursing through every
     /// sub-expression so `new`/`cast`/type-checks anywhere are validated.
     fn expr(&mut self, e: &Expr, ctx: &str) {
+        if let Expr::Field(recv, _) = e {
+            if let Expr::Ident(n) = &**recv {
+                if n.chars().next().is_some_and(|c| c.is_ascii_uppercase()) {
+                    self.static_receivers.insert(n.clone());
+                }
+            }
+        }
         match e {
             Expr::Switch {
                 subject,
