@@ -276,6 +276,7 @@ impl<'a> Parser<'a> {
             access: Access::Private,
             is_static: false,
             is_final: false,
+            is_inline: false,
             get: PropAccess::Default,
             set: PropAccess::Default,
             meta: Vec::new(),
@@ -556,7 +557,8 @@ impl<'a> Parser<'a> {
             TokKind::Kw(Kw::Var) | TokKind::Kw(Kw::Final) => {
                 let is_final = self.at_kw(Kw::Final);
                 self.bump();
-                let field = self.parse_field(meta, access, is_static, is_final)?;
+                let mut field = self.parse_field(meta, access, is_static, is_final)?;
+                field.is_inline = modifiers.is_inline;
                 class.fields.push(field);
             }
             TokKind::Kw(Kw::Function) => {
@@ -606,6 +608,7 @@ impl<'a> Parser<'a> {
             access,
             is_static,
             is_final,
+            is_inline: false,
             get,
             set,
             meta,

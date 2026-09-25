@@ -313,8 +313,9 @@ class Reader {
         "non-literal `final` static → const Meyers accessor:\n{header}"
     );
     assert!(
-        header.contains("static int MAX;") && header.contains("static std::string Label;"),
-        "literal statics → plain `static` declarations:\n{header}"
+        header.contains("static const int MAX = 10;") && header.contains("static std::string Label;"),
+        "literal statics → plain `static` declarations, and a `final` Int one an \
+         in-class integral constant:\n{header}"
     );
     assert!(
         !header.contains("\tVec Origin;"),
@@ -343,7 +344,7 @@ class Reader {
         "no redundant guard flag — the function-local static already inits once:\n{out}"
     );
     assert!(
-        out.contains("int Store::MAX = 10;") && out.contains("std::string Store::Label = \"hi\";"),
+        out.contains("const int Store::MAX;") && out.contains("std::string Store::Label = \"hi\";"),
         "literal statics → out-of-line definitions:\n{out}"
     );
 

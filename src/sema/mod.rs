@@ -6,6 +6,7 @@
 //! namespace. It also computes the set of `#include`s each generated header needs.
 
 pub mod escape;
+mod fields;
 pub mod includes;
 mod qualify;
 pub mod types;
@@ -212,6 +213,7 @@ impl Program {
         prog.index_types();
         prog.qualify_type_paths();
         prog.resolve_imports();
+        prog.infer_field_types();
         prog
     }
 

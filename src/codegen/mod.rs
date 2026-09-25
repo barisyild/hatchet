@@ -153,6 +153,25 @@ pub(crate) fn is_meyers_static(prog: &Program, mi: usize, f: &Field) -> bool {
     f.init.as_ref().is_some_and(|e| !is_literal_init(e))
 }
 
+/// A static that C++ can hold as an integral constant: `inline` or `final` (Haxe never
+/// reassigns either), typed `Int`, with a literal initialiser (after `sema::fields` has
+/// folded constant expressions). It is declared in the class as
+/// `static const int NAME = <lit>;`, which makes it an integral constant expression the
+/// compiler folds into every use, and defined without an initialiser in the `.cpp` for
+/// uses that bind a reference. A plain `static int` would be a load from memory at every
+/// read, and could not appear where C++ needs a constant.
+pub(crate) fn is_const_static(f: &Field) -> bool {
+    f.is_static
+        && (f.is_inline || f.is_final)
+        && f.ty.as_ref().is_some_and(|t| {
+            matches!(t, Type::Named { path, params, .. } if params.is_empty() && path.len() == 1 && path[0] == "Int")
+        })
+        && f.init.as_ref().is_some_and(|e| {
+            matches!(e, Expr::Int(_))
+                || matches!(e, Expr::Unary { op: UnOp::Neg, expr, prefix: true } if matches!(**expr, Expr::Int(_)))
+        })
+}
+
 /// Whether a static field's type is a primitive scalar or `String` (following alias
 /// typedefs) — the only shapes that can be a plain constant-initialised C++ data
 /// member. A parameterised or non-primitive named type (struct/container/reference)

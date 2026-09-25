@@ -441,6 +441,9 @@ pub struct Field {
     pub access: Access,
     pub is_static: bool,
     pub is_final: bool,
+    /// `inline var` / `static inline var`: a compile-time constant in Haxe (never
+    /// reassigned). With `final`, what lets a static be emitted as a C++ constant.
+    pub is_inline: bool,
     pub get: PropAccess,
     pub set: PropAccess,
     pub meta: Vec<Meta>,

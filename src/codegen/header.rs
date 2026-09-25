@@ -856,7 +856,14 @@ impl<'a> HeaderGen<'a> {
             // `Class::NAME`(`()`) — never `this->NAME`.
             if f.is_static {
                 let fty = self.field_type(c, f, &nullable);
-                let decl = if is_meyers_static(self.prog, self.mi, f) {
+                let decl = if crate::codegen::is_const_static(f) {
+                    let lit = f
+                        .init
+                        .as_ref()
+                        .and_then(crate::codegen::render_scalar_literal)
+                        .unwrap_or_default();
+                    format!("{t}\tstatic const {fty} {} = {lit};\n", f.name)
+                } else if is_meyers_static(self.prog, self.mi, f) {
                     let cst = if f.is_final { "const " } else { "" };
                     format!("{t}\tstatic {cst}{fty}& {}();\n", f.name)
                 } else {

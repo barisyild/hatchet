@@ -13,7 +13,43 @@ impl<'a> BodyGen<'a> {
             .map(|t| t.cpp_name().to_string())
             .unwrap_or_else(|| self.class.name.clone());
 
-        if let Some(ctor) = self.class.ctor.clone() {
+        if let Some(mut ctor) = self.class.ctor.clone() {
+            // Instance field initialisers (`var x:Int = 7;`) run at the start of the
+            // constructor in Haxe. C++98 has no in-class member initialisers, so they
+            // become assignments at the head of the body, after a leading `super(...)`
+            // (which becomes the base initialiser). They used to be dropped, leaving the
+            // fields uninitialised.
+            let inits: Vec<Stmt> = self
+                .class
+                .fields
+                .iter()
+                .filter(|f| !f.is_static && f.init.is_some())
+                .filter(|f| {
+                    !(f.get == PropAccess::Get
+                        && f.set == PropAccess::Never
+                        && !has_meta(&f.meta, "isVar"))
+                })
+                .map(|f| {
+                    Stmt::Expr(
+                        Expr::Assign {
+                            op: None,
+                            target: Box::new(Expr::Field(Box::new(Expr::This), f.name.clone())),
+                            value: Box::new(f.init.clone().expect("filtered on init")),
+                        },
+                        0,
+                    )
+                })
+                .collect();
+            if !inits.is_empty() {
+                let body = ctor.body.get_or_insert_with(Vec::new);
+                let at = match body.first() {
+                    Some(Stmt::Expr(Expr::Call(t, _), _)) if matches!(**t, Expr::Super) => 1,
+                    _ => 0,
+                };
+                for (i, st) in inits.into_iter().enumerate() {
+                    body.insert(at + i, st);
+                }
+            }
             s.push_str(&self.ctor_impl(&name, &ctor));
             s.push('\n');
         }
@@ -64,6 +100,12 @@ impl<'a> BodyGen<'a> {
         let vty = self.field_ty(f);
         let spelling = self.decl_spelling(&vty);
 
+        if crate::codegen::is_const_static(f) {
+            // The value is in the class declaration; this is the definition that a use
+            // binding a reference needs, and it takes no initialiser.
+            self.pop_scope();
+            return format!("\tconst {spelling} {class_name}::{name};\n", name = f.name);
+        }
         if !crate::codegen::is_meyers_static(self.prog, self.mi, f) {
             // Plain class static: `T Class::NAME[ = <lit>];`.
             let init = f.init.as_ref().map(|e| {
