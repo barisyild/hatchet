@@ -7,6 +7,7 @@
 
 pub mod escape;
 pub mod includes;
+mod qualify;
 pub mod types;
 pub mod validate;
 
@@ -209,6 +210,7 @@ impl Program {
             extract_depth: 1,
         };
         prog.index_types();
+        prog.qualify_type_paths();
         prog.resolve_imports();
         prog
     }
