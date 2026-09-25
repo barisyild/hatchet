@@ -139,6 +139,13 @@ impl<'a> Parser<'a> {
     }
 
     pub(super) fn parse_unary(&mut self) -> PResult<Expr> {
+        // Call-site inlining (`inline Foo.bar(x)`, Haxe 4) asks the Haxe compiler to
+        // inline one call. It has no effect on meaning, and inlining in C++ is the C++
+        // compiler's decision, so the call is kept and the keyword dropped.
+        if self.at_kw(Kw::Inline) && !matches!(self.peek2(), TokKind::Kw(Kw::Function)) {
+            self.bump();
+            return self.parse_unary();
+        }
         if self.eat_kw(Kw::Untyped) {
             // `untyped EXPR` — Haxe's typer escape hatch. The operand is a normal
             // expression (still transpiled); `untyped` only marks its type as opaque.

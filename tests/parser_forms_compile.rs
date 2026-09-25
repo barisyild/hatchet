@@ -2,7 +2,8 @@
 //! **expression-bodied functions** (`function f():Int return x;`, also with the body on
 //! the next line), **several declarators in one `var`** (`var a = 1, b = 2;`, whose later
 //! names must stay in the same scope), and **`#if` around imports, members and methods**,
-//! decided at transpile time against `-D` flags (nested, `#elseif`, `#else`).
+//! decided at transpile time against `-D` flags (nested, `#elseif`, `#else`); and a
+//! **call-site `inline`** (`inline Forms.twice(5)`), which only asks Haxe to inline.
 //!
 //! Skipped (passes vacuously) when no C++ compiler is available.
 
@@ -50,6 +51,8 @@ class Forms {
 	public static function unsignedLess(a:Int, b:Int):Bool
 		return (a ^ 0x80000000) < (b ^ 0x80000000);
 
+	public function viaInline():Int return inline Forms.twice(5);
+
 	public function split(a:Int):Int {
 		final lo = a & 0xFFFF, hi = a >>> 16;
 		var x:Int = 1, y = 2;
@@ -79,8 +82,8 @@ const MAIN_CPP: &str = r#"#include <stdio.h>
 using namespace lib;
 int main() {
 	Forms f;
-	printf("mode=%d twice=%d ult=%d split=%d extra=%d\n", f.mode, Forms::twice(21),
-		Forms::unsignedLess(1, -1) ? 1 : 0, f.split(0x00030004), f.extra());
+	printf("mode=%d twice=%d ult=%d split=%d extra=%d inl=%d\n", f.mode, Forms::twice(21),
+		Forms::unsignedLess(1, -1) ? 1 : 0, f.split(0x00030004), f.extra(), f.viaInline());
 	return 0;
 }
 "#;
@@ -157,7 +160,7 @@ fn parser_forms_compile_and_run() {
     // split(0x00030004): lo 4 + hi 3 + 1 + 2 = 10. unsignedLess(1, -1): 1 < 0xFFFFFFFF.
     assert_eq!(
         stdout.trim(),
-        "mode=1 twice=42 ult=1 split=10 extra=7",
+        "mode=1 twice=42 ult=1 split=10 extra=7 inl=10",
         "got: {stdout}"
     );
 }
