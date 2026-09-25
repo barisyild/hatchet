@@ -76,7 +76,9 @@ fn locals_in_stmt(s: &Stmt, out: &mut BTreeSet<String>) {
                 locals_in_expr(e, out);
             }
         }
-        Stmt::If { cond, then, els, .. } => {
+        Stmt::If {
+            cond, then, els, ..
+        } => {
             locals_in_expr(cond, out);
             locals_in_stmt(then, out);
             if let Some(e) = els {
@@ -380,7 +382,9 @@ impl Ctx<'_> {
                     self.expr(e);
                 }
             }
-            Stmt::If { cond, then, els, .. } => {
+            Stmt::If {
+                cond, then, els, ..
+            } => {
                 self.expr(cond);
                 self.stmt(then);
                 if let Some(e) = els {

@@ -16,6 +16,7 @@ impl<'a> Parser<'a> {
                 continue;
             }
             stmts.push(self.parse_stmt()?);
+            stmts.append(&mut self.extra_decls);
         }
         self.expect_sym(Sym::RBrace)?;
         Ok(stmts)
@@ -43,6 +44,30 @@ impl<'a> Parser<'a> {
         } else {
             None
         };
+        // `var a = 1, b:Int = 2;`: each further declarator is its own `Stmt::Var`,
+        // queued for the enclosing statement list.
+        while self.eat_sym(Sym::Comma) {
+            let name = self.expect_ident()?;
+            let ty = if self.eat_sym(Sym::Colon) {
+                Some(self.parse_type()?)
+            } else {
+                None
+            };
+            let init = if self.eat_sym(Sym::Assign) {
+                Some(self.parse_expr()?)
+            } else {
+                None
+            };
+            self.extra_decls.push(Stmt::Var {
+                name,
+                ty,
+                init,
+                is_final,
+                delete,
+                sink,
+                line,
+            });
+        }
         self.eat_sym(Sym::Semi);
         Ok(Stmt::Var {
             name,
@@ -402,6 +427,7 @@ impl<'a> Parser<'a> {
                 continue;
             }
             body.push(self.parse_stmt()?);
+            body.append(&mut self.extra_decls);
         }
         Ok(body)
     }

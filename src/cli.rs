@@ -46,6 +46,13 @@ pub struct Args {
     #[arg(long, value_name = "PATH", num_args = 1..)]
     pub include: Vec<PathBuf>,
 
+    /// Define a conditional-compilation flag (repeatable): `-D recompsx_cooperative`.
+    /// Decides `#if` around top-level declarations and class members, which is resolved
+    /// at transpile time as Haxe resolves it. `#if` inside a function body is still handed
+    /// to the C++ preprocessor, where the flag is a `-D` to the C++ compiler instead.
+    #[arg(short = 'D', long = "define", value_name = "NAME")]
+    pub define: Vec<String>,
+
     /// Output directory for generated .h/.cpp (defaults to the inferred project
     /// root, so files are produced alongside their Haxe sources). Ignored with
     /// `--dry-run` / `--stdout`.
@@ -161,6 +168,7 @@ impl Config {
 }
 
 fn run(args: Args) -> Result<(), String> {
+    parser::set_defines(args.define.iter().cloned());
     let cfg = resolve_config(args)?;
 
     // The resolution scope is exactly the expanded file set (files + crawled

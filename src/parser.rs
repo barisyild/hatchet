@@ -12,6 +12,8 @@ use crate::lexer::{lex, Kw, Sym, TokKind, Token};
 
 mod decls;
 mod expr;
+mod pp;
+pub use pp::set_defines;
 mod stmt;
 mod types;
 
@@ -43,6 +45,7 @@ pub fn parse(src: &str) -> Result<File, ParseError> {
         src: src.as_bytes(),
         toks: tokens,
         pos: 0,
+        extra_decls: Vec::new(),
     };
     p.parse_file()
 }
@@ -57,6 +60,7 @@ pub fn parse_expression(src: &str) -> Result<Expr, ParseError> {
         src: src.as_bytes(),
         toks: tokens,
         pos: 0,
+        extra_decls: Vec::new(),
     };
     p.parse_expr()
 }
@@ -65,6 +69,10 @@ struct Parser<'a> {
     src: &'a [u8],
     toks: Vec<Token>,
     pos: usize,
+    /// The second and later declarators of `var a = 1, b = 2;`. A statement parses to
+    /// one `Stmt::Var`; the others wait here and the statement list that asked for the
+    /// statement takes them right after it, in the same scope (a block would hide them).
+    extra_decls: Vec<Stmt>,
 }
 
 type PResult<T> = Result<T, ParseError>;

@@ -118,12 +118,25 @@ fn negative_hex_literals_keep_haxe_semantics_at_run_time() {
     std::fs::write(&main_cpp, MAIN_CPP).unwrap();
     let out = root.join("out");
     let gen_ok = Command::new(env!("CARGO_BIN_EXE_hatchet"))
-        .arg("--src").arg(&lib).arg("--out").arg(&out).arg("--force")
-        .status().map(|s| s.success()).unwrap_or(false);
+        .arg("--src")
+        .arg(&lib)
+        .arg("--out")
+        .arg(&out)
+        .arg("--force")
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
     assert!(gen_ok, "transpiling the signed-hex demo failed");
-    let exe = out.join(if cfg!(windows) { "signedhex.exe" } else { "signedhex" });
+    let exe = out.join(if cfg!(windows) {
+        "signedhex.exe"
+    } else {
+        "signedhex"
+    });
     let mut cmd = Command::new(&gxx);
-    cmd.args(["-std=c++98", "-pedantic", "-Wall"]).arg("-I").arg(&out).arg(&main_cpp);
+    cmd.args(["-std=c++98", "-pedantic", "-Wall"])
+        .arg("-I")
+        .arg(&out)
+        .arg(&main_cpp);
     for f in cpp_files(&out) {
         cmd.arg(f);
     }
@@ -138,5 +151,9 @@ fn negative_hex_literals_keep_haxe_semantics_at_run_time() {
     let stdout = String::from_utf8_lossy(&run.stdout);
     // Haxe: (0^S) < (1^S) is S < S+1 -> true; (1^S) < (S^S) is S+1 < 0 -> true;
     // -1 >> 4 is -1; 0xFFFF0000 is negative; the case matches; -5 has the sign bit.
-    assert_eq!(stdout.trim(), "ult=1,1 shr=-1 neg=1 case=1 const=1", "got: {stdout}");
+    assert_eq!(
+        stdout.trim(),
+        "ult=1,1 shr=-1 neg=1 case=1 const=1",
+        "got: {stdout}"
+    );
 }

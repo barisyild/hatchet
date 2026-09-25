@@ -28,6 +28,9 @@ impl<'a> Parser<'a> {
         }
 
         loop {
+            if self.outer_directive()? {
+                continue;
+            }
             // imports / usings may be interleaved with metadata-free positions
             if self.at_kw(Kw::Import) {
                 file.imports.push(self.parse_import()?);
@@ -528,6 +531,9 @@ impl<'a> Parser<'a> {
     // ---- members --------------------------------------------------------
 
     pub(super) fn parse_member_into(&mut self, class: &mut Class) -> PResult<()> {
+        if self.outer_directive()? {
+            return Ok(());
+        }
         let meta = self.parse_meta_list()?;
 
         let mut access = Access::Default;
@@ -668,9 +674,16 @@ impl<'a> Parser<'a> {
             } else {
                 Some(self.parse_block()?)
             }
-        } else {
-            self.eat_sym(Sym::Semi);
+        } else if self.eat_sym(Sym::Semi) || self.at_sym(Sym::RBrace) || self.at_eof() {
+            // No body: an `extern`/interface declaration.
             None
+        } else {
+            // An expression body, which Haxe allows for any function:
+            // `function get():Int return x;`, `inline function f(a) return a + 1;`,
+            // `function log(s) trace(s);`. One statement, the same as a block holding it.
+            let mut body = vec![self.parse_stmt()?];
+            body.append(&mut self.extra_decls);
+            Some(body)
         };
         Ok(Function {
             name,

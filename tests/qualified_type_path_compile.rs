@@ -97,8 +97,13 @@ fn qualified_type_paths_compile_and_run() {
     std::fs::write(&main_cpp, MAIN_CPP).unwrap();
     let out = root.join("out");
     let gen = Command::new(env!("CARGO_BIN_EXE_hatchet"))
-        .arg("--src").arg(&src).arg("--out").arg(&out).arg("--force")
-        .output().expect("run hatchet");
+        .arg("--src")
+        .arg(&src)
+        .arg("--out")
+        .arg(&out)
+        .arg("--force")
+        .output()
+        .expect("run hatchet");
     assert!(
         gen.status.success(),
         "transpiling the qualified-path demo failed:\n{}{}",
@@ -110,9 +115,16 @@ fn qualified_type_paths_compile_and_run() {
         !main_src.contains("util.MathOps"),
         "a qualified type path must not survive as a dotted member chain:\n{main_src}"
     );
-    let exe = out.join(if cfg!(windows) { "qualified.exe" } else { "qualified" });
+    let exe = out.join(if cfg!(windows) {
+        "qualified.exe"
+    } else {
+        "qualified"
+    });
     let mut cmd = Command::new(&gxx);
-    cmd.args(["-std=c++98", "-pedantic", "-Wall"]).arg("-I").arg(&out).arg(&main_cpp);
+    cmd.args(["-std=c++98", "-pedantic", "-Wall"])
+        .arg("-I")
+        .arg(&out)
+        .arg(&main_cpp);
     for f in cpp_files(&out) {
         cmd.arg(f);
     }

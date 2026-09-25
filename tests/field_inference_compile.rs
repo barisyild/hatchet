@@ -89,9 +89,15 @@ fn unannotated_fields_are_typed_and_constants_folded() {
         "static int counter;",
         "int inst;",
     ] {
-        assert!(header.contains(want), "expected `{want}` in the header:\n{header}");
+        assert!(
+            header.contains(want),
+            "expected `{want}` in the header:\n{header}"
+        );
     }
-    assert!(!header.contains("void*"), "no field may fall back to void*:\n{header}");
+    assert!(
+        !header.contains("void*"),
+        "no field may fall back to void*:\n{header}"
+    );
     assert!(
         header.contains("std::vector<int>"),
         "an Int array literal types the field as Array<Int>:\n{header}"
@@ -113,12 +119,28 @@ fn unannotated_fields_compile_and_run() {
     std::fs::write(&main_cpp, MAIN_CPP).unwrap();
     let out = root.join("out");
     let gen = Command::new(env!("CARGO_BIN_EXE_hatchet"))
-        .arg("--src").arg(&lib).arg("--out").arg(&out).arg("--force")
-        .output().expect("run hatchet");
-    assert!(gen.status.success(), "transpiling failed:\n{}", String::from_utf8_lossy(&gen.stderr));
-    let exe = out.join(if cfg!(windows) { "fieldinfer.exe" } else { "fieldinfer" });
+        .arg("--src")
+        .arg(&lib)
+        .arg("--out")
+        .arg(&out)
+        .arg("--force")
+        .output()
+        .expect("run hatchet");
+    assert!(
+        gen.status.success(),
+        "transpiling failed:\n{}",
+        String::from_utf8_lossy(&gen.stderr)
+    );
+    let exe = out.join(if cfg!(windows) {
+        "fieldinfer.exe"
+    } else {
+        "fieldinfer"
+    });
     let mut cmd = Command::new(&gxx);
-    cmd.args(["-std=c++98", "-pedantic", "-Wall"]).arg("-I").arg(&out).arg(&main_cpp);
+    cmd.args(["-std=c++98", "-pedantic", "-Wall"])
+        .arg("-I")
+        .arg(&out)
+        .arg(&main_cpp);
     for f in cpp_files(&out) {
         cmd.arg(f);
     }

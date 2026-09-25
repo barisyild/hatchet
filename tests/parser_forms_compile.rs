@@ -1,7 +1,8 @@
-//! Compile + run gate for **instance field initialisers**. `var x:Int = 7;` runs at the
-//! start of the constructor in Haxe; C++98 has no in-class member initialisers, and the
-//! initialisers used to be dropped, leaving the fields uninitialised. A subclass's own
-//! initialisers run after its `super(...)`, which sees the base's already set.
+//! Compile + run gate for three Haxe forms the parser used to reject:
+//! **expression-bodied functions** (`function f():Int return x;`, also with the body on
+//! the next line), **several declarators in one `var`** (`var a = 1, b = 2;`, whose later
+//! names must stay in the same scope), and **`#if` around imports, members and methods**,
+//! decided at transpile time against `-D` flags (nested, `#elseif`, `#else`).
 //!
 //! Skipped (passes vacuously) when no C++ compiler is available.
 
@@ -25,30 +26,61 @@ fn find_gxx() -> Option<String> {
 
 const SRC: &str = r#"package lib;
 
-class Base {
-	public var a:Int = 7;
-	public var b = 8;
-	public var label:String = "base";
-	public function new() {}
-}
+#if fast
+import lib.Helper;
+#end
 
-class Derived extends Base {
-	public var c:Int = 40;
-	public var sum:Int = 0;
-	public function new() {
-		super();
-		sum = a + b + c;
+class Forms {
+	#if fast
+	public var mode:Int = 1;
+	#elseif slow
+	public var mode:Int = 2;
+	#else
+	public var mode:Int = 3;
+	#end
+
+	#if (!fast && !slow)
+	public var missing:Int = 99;
+	#end
+
+	public function new() {}
+
+	public static inline function twice(a:Int):Int return a * 2;
+
+	public static function unsignedLess(a:Int, b:Int):Bool
+		return (a ^ 0x80000000) < (b ^ 0x80000000);
+
+	public function split(a:Int):Int {
+		final lo = a & 0xFFFF, hi = a >>> 16;
+		var x:Int = 1, y = 2;
+		return lo + hi + x + y;
 	}
+
+	#if fast
+	public function extra():Int {
+		#if nested_never
+		return -1;
+		#end
+		return Helper.seven();
+	}
+	#end
+}
+"#;
+
+const HELPER: &str = r#"package lib;
+
+class Helper {
+	public static function seven():Int return 7;
 }
 "#;
 
 const MAIN_CPP: &str = r#"#include <stdio.h>
-#include "lib/Base.h"
+#include "lib/Forms.h"
 using namespace lib;
 int main() {
-	Derived* d = new Derived();
-	printf("a=%d b=%d c=%d sum=%d label=%s\n", d->a, d->b, d->c, d->sum, d->label.c_str());
-	delete d;
+	Forms f;
+	printf("mode=%d twice=%d ult=%d split=%d extra=%d\n", f.mode, Forms::twice(21),
+		Forms::unsignedLess(1, -1) ? 1 : 0, f.split(0x00030004), f.extra());
 	return 0;
 }
 "#;
@@ -69,16 +101,17 @@ fn cpp_files(dir: &Path) -> Vec<PathBuf> {
 }
 
 #[test]
-fn instance_field_initialisers_run_in_the_constructor() {
+fn parser_forms_compile_and_run() {
     let Some(gxx) = find_gxx() else {
         eprintln!("skipping: no C++ compiler");
         return;
     };
-    let root = std::env::temp_dir().join(format!("hatchet_instinit_{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("hatchet_forms_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     let lib = root.join("lib");
     std::fs::create_dir_all(&lib).unwrap();
-    std::fs::write(lib.join("Base.hx"), SRC).unwrap();
+    std::fs::write(lib.join("Forms.hx"), SRC).unwrap();
+    std::fs::write(lib.join("Helper.hx"), HELPER).unwrap();
     let main_cpp = root.join("main.cpp");
     std::fs::write(&main_cpp, MAIN_CPP).unwrap();
     let out = root.join("out");
@@ -88,18 +121,22 @@ fn instance_field_initialisers_run_in_the_constructor() {
         .arg("--out")
         .arg(&out)
         .arg("--force")
+        .arg("-D")
+        .arg("fast")
         .output()
         .expect("run hatchet");
     assert!(
         gen.status.success(),
-        "transpiling failed:\n{}",
+        "transpiling failed:\n{}{}",
+        String::from_utf8_lossy(&gen.stdout),
         String::from_utf8_lossy(&gen.stderr)
     );
-    let exe = out.join(if cfg!(windows) {
-        "instinit.exe"
-    } else {
-        "instinit"
-    });
+    let header = std::fs::read_to_string(out.join("lib").join("Forms.h")).unwrap();
+    assert!(
+        !header.contains("missing"),
+        "an #if branch that does not hold is dropped:\n{header}"
+    );
+    let exe = out.join(if cfg!(windows) { "forms.exe" } else { "forms" });
     let mut cmd = Command::new(&gxx);
     cmd.args(["-std=c++98", "-pedantic", "-Wall"])
         .arg("-I")
@@ -117,9 +154,10 @@ fn instance_field_initialisers_run_in_the_constructor() {
     );
     let run = Command::new(&exe).output().expect("run the demo");
     let stdout = String::from_utf8_lossy(&run.stdout);
+    // split(0x00030004): lo 4 + hi 3 + 1 + 2 = 10. unsignedLess(1, -1): 1 < 0xFFFFFFFF.
     assert_eq!(
         stdout.trim(),
-        "a=7 b=8 c=40 sum=55 label=base",
+        "mode=1 twice=42 ult=1 split=10 extra=7",
         "got: {stdout}"
     );
 }
