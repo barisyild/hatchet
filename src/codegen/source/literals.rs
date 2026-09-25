@@ -209,6 +209,43 @@ impl<'a> BodyGen<'a> {
         } else {
             (vec_ty.clone(), elem.clone())
         };
+        // A literal of integer constants (a jump table, a lookup table) is data: a
+        // `static const` array in read-only storage and one range construction. Element by
+        // element it was a `push_back` per entry, about four instructions for every four
+        // bytes of table, which is what made a large generated table cost megabytes of code.
+        let int_consts: Option<Vec<String>> = if elem.base == "int" && elems.len() >= 8 {
+            elems
+                .iter()
+                .map(|e| match e {
+                    Expr::Int(v) => Some(crate::codegen::int_lit(v)),
+                    Expr::Unary {
+                        op: UnOp::Neg,
+                        expr,
+                        prefix: true,
+                    } => match &**expr {
+                        Expr::Int(v) => Some(format!("-{}", crate::codegen::int_lit(v))),
+                        _ => None,
+                    },
+                    _ => None,
+                })
+                .collect()
+        } else {
+            None
+        };
+        if let Some(values) = int_consts {
+            let _ = writeln!(out, "{t}static const int {name}_data[] = {{");
+            for chunk in values.chunks(16) {
+                let _ = writeln!(out, "{t}\t{},", chunk.join(", "));
+            }
+            let _ = writeln!(out, "{t}}};");
+            let _ = writeln!(
+                out,
+                "{t}{} {name}({name}_data, {name}_data + {});",
+                self.decl_spelling(&vec_ty),
+                values.len()
+            );
+            return;
+        }
         let _ = writeln!(out, "{t}{} {name};", self.decl_spelling(&vec_ty));
         for el in elems {
             if let Expr::ObjectLit(fields) = el {

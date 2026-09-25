@@ -97,7 +97,13 @@ pub fn analyze_class(prog: &Program, mi: usize, class: &Class) -> ClassEscape {
     // refuse to free it (leak instead).
     let handed_out = fields_handed_out(prog, mi, class, &fields);
     inferred.retain(|f| !handed_out.contains(f));
-    let owned: BTreeSet<String> = tagged.union(&inferred).cloned().collect();
+    // A static field is not part of any object: no `this` to free through, no destructor,
+    // program lifetime. Never owned (leaking is the safe side, as everywhere here).
+    let owned: BTreeSet<String> = tagged
+        .union(&inferred)
+        .filter(|n| !class.fields.iter().any(|f| f.is_static && &f.name == *n))
+        .cloned()
+        .collect();
     ClassEscape {
         owned_fields: owned,
     }
@@ -168,8 +174,18 @@ fn inferred_owned(class: &Class, fields: &BTreeSet<String>) -> BTreeSet<String> 
 /// there, since over-claiming ownership only ever produces a leak, never a double-free.
 fn owned_fields_unguarded(class: &Class) -> BTreeSet<String> {
     let fields: BTreeSet<String> = class.fields.iter().map(|f| f.name.clone()).collect();
+    // A static field is not part of any object: it has no `this` to free through, no
+    // destructor, and lives for the whole program, so it is never owned (a leak is the
+    // safe side, as everywhere in this analysis).
+    let statics: BTreeSet<String> = class
+        .fields
+        .iter()
+        .filter(|f| f.is_static)
+        .map(|f| f.name.clone())
+        .collect();
     tagged_owned(class)
         .union(&inferred_owned(class, &fields))
+        .filter(|n| !statics.contains(*n))
         .cloned()
         .collect()
 }

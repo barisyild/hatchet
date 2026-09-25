@@ -125,8 +125,20 @@ impl<'a> BodyGen<'a> {
         }
 
         // Meyers singleton accessor. `const` for an immutable (`final`) field.
-        let init = f.init.as_ref().expect("meyers static has an initializer");
-        let cst = if f.is_final { "const " } else { "" };
+        let cst = if crate::codegen::final_is_const(self.prog, self.mi, f) { "const " } else { "" };
+        let Some(init) = f.init.as_ref() else {
+            // No initialiser (`static var table:Array<Int>;`, set later): the function-local
+            // static is value-initialised, as a Haxe static starts out null/empty/zero.
+            self.pop_scope();
+            let inl = self.inline_kw();
+            return format!(
+                "\t{inl}{cst}{spelling}& {class_name}::{name}() {{\n\
+                 \t\tstatic {cst}{spelling} _hx_v = {spelling}();\n\
+                 \t\treturn _hx_v;\n\
+                 \t}}\n",
+                name = f.name,
+            );
+        };
         self.prelude_ind = 2;
         self.expected = Some(vty.clone());
         let (code, _) = self.gen_expr(init);

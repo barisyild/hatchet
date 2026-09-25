@@ -172,12 +172,35 @@ pub(crate) fn is_const_static(f: &Field) -> bool {
         })
 }
 
+/// Whether a `final` static is emitted `const`. Haxe's `final` fixes the binding, not the
+/// value: a `static final reported:Map<Int, Bool> = new Map()` is written to afterwards, so a
+/// container (`Array`/`Map`, a C++ value here) or an object reference stays mutable. Other
+/// `final` statics keep their `const`.
+pub(crate) fn final_is_const(prog: &Program, mi: usize, f: &Field) -> bool {
+    if !f.is_final {
+        return false;
+    }
+    let Some(t) = f.ty.as_ref() else {
+        return true;
+    };
+    if prog.is_pointer_deep(t, mi) {
+        return false;
+    }
+    let resolved = prog.resolve_alias_type(t, mi);
+    !matches!(&resolved, Type::Named { path, .. }
+        if path.last().is_some_and(|n| n == "Array" || n == "Map"))
+}
+
 /// Whether a static field's type is a primitive scalar or `String` (following alias
 /// typedefs) — the only shapes that can be a plain constant-initialised C++ data
 /// member. A parameterised or non-primitive named type (struct/container/reference)
 /// is not.
 fn static_type_is_scalar_or_string(prog: &Program, mi: usize, ty: &Type) -> bool {
     let resolved = prog.resolve_alias_type(ty, mi);
+    // A raw pointer (`cpp.RawPointer<T>`, a class reference) is a scalar too.
+    if prog.is_pointer_deep(ty, mi) {
+        return true;
+    }
     // A function pointer (possibly `Null<...>`) is a scalar: a plain static holds it.
     match &resolved {
         Type::Func { .. } => return true,

@@ -345,10 +345,12 @@ impl<'a> Parser<'a> {
     }
 
     fn capture_arg(&self, start_tok: usize, end_tok: usize) -> String {
-        // Single string literal → its inner content.
+        // Single string literal → its value. The escapes are Haxe's, so they are resolved
+        // here: `@:headerCode("#include \"a.h\"")` means `#include "a.h"`, which is what
+        // hxcpp emits and what a C++ compiler can read.
         if end_tok == start_tok + 1 {
             if let TokKind::Str { raw, .. } = &self.toks[start_tok].kind {
-                return raw.clone();
+                return unescape_haxe(raw);
             }
         }
         let start = self.toks[start_tok].start;
@@ -358,6 +360,33 @@ impl<'a> Parser<'a> {
             .to_string()
     }
 
+}
+
+/// The value of a Haxe string literal's raw text: `\"`, `\'`, `\\`, `\n`, `\r`, `\t` resolved;
+/// any other backslash is kept as written.
+pub fn unescape_haxe(raw: &str) -> String {
+    let mut out = String::with_capacity(raw.len());
+    let mut chars = raw.chars();
+    while let Some(c) = chars.next() {
+        if c != '\\' {
+            out.push(c);
+            continue;
+        }
+        match chars.next() {
+            Some('"') => out.push('"'),
+            Some('\'') => out.push('\''),
+            Some('\\') => out.push('\\'),
+            Some('n') => out.push('\n'),
+            Some('r') => out.push('\r'),
+            Some('t') => out.push('\t'),
+            Some(other) => {
+                out.push('\\');
+                out.push(other);
+            }
+            None => out.push('\\'),
+        }
+    }
+    out
 }
 
 #[cfg(test)]

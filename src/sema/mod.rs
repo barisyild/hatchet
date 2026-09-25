@@ -8,6 +8,7 @@
 pub mod escape;
 mod fields;
 pub mod includes;
+mod keywords;
 mod qualify;
 pub mod types;
 pub mod validate;
@@ -210,6 +211,7 @@ impl Program {
             no_trace: false,
             extract_depth: 1,
         };
+        keywords::rename(&mut prog.modules);
         prog.index_types();
         prog.qualify_type_paths();
         prog.resolve_imports();

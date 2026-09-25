@@ -50,8 +50,10 @@ pub fn extract_header_code(src: &str) -> Option<String> {
         }
         if c == quote {
             // SAFETY: slice lies on UTF-8 boundaries since we only advanced past
-            // whole bytes and the delimiters are ASCII.
-            return Some(src[content_start..i].to_string());
+            // whole bytes and the delimiters are ASCII. The value is the Haxe string's,
+            // escapes resolved as for every other metadata argument:
+            // `@:headerCode("#include \"a.h\"")` is `#include "a.h"`.
+            return Some(crate::parser::unescape_haxe(&src[content_start..i]));
         }
         i += 1;
     }
@@ -158,16 +160,14 @@ pub fn export_macros(prefix: &str) -> String {
 /// later. It is emitted **first** in the prelude so the types are available to any
 /// developer `@:headerCode` and to every engine header the modules include.
 pub fn stdint_shim() -> &'static str {
-    "#if __cplusplus < 201103L\n\
-     \t#if defined(_MSC_VER)\n\
-     \t\ttypedef unsigned __int8 uint8_t;\n\
-     \t\ttypedef unsigned __int16 uint16_t;\n\
-     \t\ttypedef unsigned __int32 uint32_t;\n\
-     \t#else\n\
-     \t\ttypedef unsigned char uint8_t;\n\
-     \t\ttypedef unsigned short uint16_t;\n\
-     \t\ttypedef unsigned int uint32_t;\n\
-     \t#endif\n\
+    // Only Visual C++ before 2010 lacks `<stdint.h>`. GCC and Clang ship it in C++98 mode too,
+    // and there it must be used: a toolchain's own `uint32_t` need not be `unsigned int` (on
+    // SH-4 newlib it is `unsigned long`), so a hand-written typedef conflicts with any system
+    // header that includes the real one.
+    "#if defined(_MSC_VER) && _MSC_VER < 1600\n\
+     \ttypedef unsigned __int8 uint8_t;\n\
+     \ttypedef unsigned __int16 uint16_t;\n\
+     \ttypedef unsigned __int32 uint32_t;\n\
      #else\n\
      \t#include <stdint.h>\n\
      #endif\n"

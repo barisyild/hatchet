@@ -864,7 +864,7 @@ impl<'a> HeaderGen<'a> {
                         .unwrap_or_default();
                     format!("{t}\tstatic const {fty} {} = {lit};\n", f.name)
                 } else if is_meyers_static(self.prog, self.mi, f) {
-                    let cst = if f.is_final { "const " } else { "" };
+                    let cst = if crate::codegen::final_is_const(self.prog, self.mi, f) { "const " } else { "" };
                     format!("{t}\tstatic {cst}{fty}& {}();\n", f.name)
                 } else {
                     format!("{t}\tstatic {fty} {};\n", f.name)

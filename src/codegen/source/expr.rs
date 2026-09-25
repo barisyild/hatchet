@@ -430,6 +430,20 @@ impl<'a> BodyGen<'a> {
                 let resolved = self.deref_alias(&nty);
                 if resolved.base.starts_with("std::vector") || resolved.base.starts_with("std::map")
                 {
+                    // `new Map()` / `new Array()` with the type parameters left to Haxe's
+                    // inference: they are the expected type's (the field or variable being
+                    // initialised), not an empty `std::map<>`.
+                    if matches!(ty, Type::Named { params, .. } if params.is_empty()) {
+                        if let Some(exp) = self.expected.clone() {
+                            let e = self.deref_alias(&exp);
+                            if !e.is_ptr
+                                && (e.base.starts_with("std::vector<")
+                                    || e.base.starts_with("std::map<"))
+                            {
+                                return (format!("{}()", e.base), e);
+                            }
+                        }
+                    }
                     return (format!("{base}()"), nty);
                 }
                 // `new String(x)` → a string *value*, not a heap pointer.
@@ -556,6 +570,17 @@ impl<'a> BodyGen<'a> {
                                     .to_string(),
                             );
                             return (format!("{l} {} {r}", binop(*op)), bool_ty());
+                        }
+                        // A value container (`Array`/`Map`, a `std::vector`/`std::map`)
+                        // has no null state either. In Haxe it is null until first assigned
+                        // (`static var counts:Array<Int>;` filled only when profiling), and
+                        // the check guards the indexing that follows; here it starts empty,
+                        // so "null" reads as "empty": the guarded code never indexes an
+                        // empty container, and a filled one passes, as it would in Haxe.
+                        let cty = self.deref_alias(sty);
+                        if !sty.is_ptr && is_container_ty(&cty) {
+                            let neg = if matches!(*op, BinOp::Ne) { "!" } else { "" };
+                            return (format!("{neg}{s}.empty()"), bool_ty());
                         }
                     }
                 }
