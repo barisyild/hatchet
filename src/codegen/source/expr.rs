@@ -1109,6 +1109,37 @@ impl<'a> BodyGen<'a> {
                         let ty = self.member_field_ty(&info, name).unwrap_or_default();
                         return (self.qualified_static_ref(&info, f), ty);
                     }
+                    // `Class.method` as a value, not called: the static function's
+                    // address, for a function-typed slot (a C function pointer).
+                    if let Some(Decl::Class(c)) = self.prog.type_decl(&info) {
+                        if let Some(m) = c.methods.iter().find(|m| {
+                            m.modifiers.is_static && m.name.as_deref() == Some(name)
+                        }) {
+                            let ns = info.cpp_namespace();
+                            let prefix = if ns == self.ns || ns.is_empty() {
+                                String::new()
+                            } else {
+                                format!("{}::", ns.join("::"))
+                            };
+                            let fty = Type::Func {
+                                params: m.params.iter().filter_map(|p| p.ty.clone()).collect(),
+                                ret: Box::new(m.ret.clone().unwrap_or(Type::Named {
+                                    path: vec!["Void".into()],
+                                    params: vec![],
+                                    optional: false,
+                                    line: 0,
+                                })),
+                            };
+                            let base = self.prog.map_type_use(&fty, self.mi, &self.ns);
+                            return (
+                                format!("&{prefix}{}::{name}", info.cpp_name()),
+                                Ty {
+                                    base,
+                                    ..Default::default()
+                                },
+                            );
+                        }
+                    }
                 }
             }
         }

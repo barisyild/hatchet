@@ -1309,8 +1309,9 @@ impl Collector {
             // A function type anywhere but a top-level `final` lambda binding (a
             // field, parameter, return, local, or typedef alias) would lower to a
             // bare `void*` — a silent guess. Record it for an `Unsupported` flag.
+            // A function type now lowers to a C function pointer (`hx_fn<...>::type`),
+            // which holds a static function or `null`; only its parts are checked.
             Type::Func { params, ret } => {
-                self.func_uses.push((type_line(ty), ctx.to_string()));
                 for p in params {
                     self.check(p, ctx);
                 }

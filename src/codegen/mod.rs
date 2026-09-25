@@ -178,6 +178,17 @@ pub(crate) fn is_const_static(f: &Field) -> bool {
 /// is not.
 fn static_type_is_scalar_or_string(prog: &Program, mi: usize, ty: &Type) -> bool {
     let resolved = prog.resolve_alias_type(ty, mi);
+    // A function pointer (possibly `Null<...>`) is a scalar: a plain static holds it.
+    match &resolved {
+        Type::Func { .. } => return true,
+        Type::Named { path, params, .. }
+            if path.last().is_some_and(|n| n == "Null")
+                && matches!(params.first(), Some(Type::Func { .. })) =>
+        {
+            return true
+        }
+        _ => {}
+    }
     let Type::Named { path, params, .. } = &resolved else {
         return false;
     };

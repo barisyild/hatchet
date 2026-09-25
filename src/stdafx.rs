@@ -173,6 +173,20 @@ pub fn stdint_shim() -> &'static str {
      #endif\n"
 }
 
+/// The spelling of a function type. A Haxe function type (`Int -> Ctx -> Bool`) holding
+/// a static function lowers to a C function pointer, but C++98's declarator syntax puts
+/// the name inside the type (`bool (*f)(int, Ctx*)`), which no `{type} {name}` position can
+/// write. `hx_fn<bool(int, Ctx*) >::fn*` is the same pointer type written as a prefix (a
+/// function type is a valid C++98 template argument), and ending in `*` it is treated as
+/// the pointer it is everywhere else (nullable, `NULL`, never boxed). Guarded on its own
+/// because every package's prelude carries it and one translation unit sees several.
+pub fn fn_pointer_shim() -> &'static str {
+    "#ifndef HATCHET_HX_FN\n\
+     #define HATCHET_HX_FN\n\
+     template<typename F> struct hx_fn { typedef F fn; };\n\
+     #endif\n"
+}
+
 /// Render the full `StdAfx.h`: inside the package guard, the `uint*_t` shim, then
 /// the developer's `@:headerCode` (when present) merged with Hatchet's required
 /// standard includes, then the platform export macros. `header_code` is `None` for
@@ -197,7 +211,12 @@ pub fn content_for(
 pub fn prelude_body(header_code: Option<&str>, export_macro: &str) -> String {
     let body = merged_body(header_code);
     let macros = export_macros(export_macro);
-    let sections = [stdint_shim().trim(), body.trim(), macros.trim()];
+    let sections = [
+        stdint_shim().trim(),
+        fn_pointer_shim().trim(),
+        body.trim(),
+        macros.trim(),
+    ];
     sections
         .iter()
         .filter(|s| !s.is_empty())

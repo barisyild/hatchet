@@ -775,7 +775,22 @@ impl Program {
             // A non-empty anonymous structure used in type position is treated as
             // opaque (`void*`); named struct typedefs are the supported form.
             Type::Anon(_) => "void*".to_string(),
-            Type::Func { .. } => "void*".to_string(),
+            // A function type holds a static function: a C function pointer, spelled
+            // `hx_fn<R(A, B) >::fn*` (see `stdafx::fn_pointer_shim`).
+            Type::Func { params, ret } => {
+                let r = match &**ret {
+                    Type::Named { path, .. } if path.last().is_some_and(|n| n == "Void") => {
+                        "void".to_string()
+                    }
+                    other => self.map_type_use(other, ctx_module, current_ns),
+                };
+                let ps: Vec<String> = params
+                    .iter()
+                    .filter(|p| !matches!(p, Type::Named { path, .. } if path.last().is_some_and(|n| n == "Void")))
+                    .map(|p| self.map_type_use(p, ctx_module, current_ns))
+                    .collect();
+                format!("hx_fn<{r}({}) >::fn*", ps.join(", "))
+            }
         }
     }
 
@@ -790,6 +805,10 @@ impl Program {
         if let Type::Named { path, params, .. } = ty {
             if path.last().map(|s| s.as_str()) == Some("Null") && params.len() == 1 {
                 let inner = self.map_type_use(&params[0], ctx_module, current_ns);
+                // A function type is already a pointer: `Null` adds nullability only.
+                if matches!(params[0], Type::Func { .. }) {
+                    return inner;
+                }
                 // Already a pointer (a reference type, a pointer-interop alias, or a
                 // spelling that ends in `*`) → the `Null` adds nullability, not another
                 // level of indirection. Resolve through aliases so `Null<Ptr>` where
